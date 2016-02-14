@@ -23,9 +23,9 @@ void l2c_printf(const char * format, ...)
 }
 
 //////////////////////////////////////////////////////////////////////////
-//The LUA hooks that invoke a variable or function class. They expect the
-//first up value of the call to be a pointer to the class, stored as
-//light user data. Below are the functions used to register them with LUA
+//The LUA hooks that invoke the getter or setter for a variable via
+//a variable functor. The functions expect the first up value to be
+//a pointer to the c++ functor.
 //////////////////////////////////////////////////////////////////////////
 int l2cinternal_variable_get(lua_State* L)
 {
@@ -41,13 +41,6 @@ int l2cinternal_variable_set(lua_State* L)
 		luaL_error(L, "Invalid variable access");
 	return variable->Set(L);
 }
-int l2cinternal_function_invoke(lua_State* L)
-{
-	L2CFunction* func = (L2CFunction*)lua_touserdata(L,lua_upvalueindex(1));
-	if (!func)
-		luaL_error(L, "Invalid variable access");
-	return func->Invoke(L);
-}
 
 int l2cinternal_create_variable_get(lua_State* L, L2CVariable* variable)
 {
@@ -61,9 +54,57 @@ int l2cinternal_create_variable_set(lua_State* L, L2CVariable* variable)
 	lua_pushcclosure(L,l2cinternal_variable_set,1);
 	return 1;
 }
+
+//////////////////////////////////////////////////////////////////////////
+//Similar but a bit more advanced than variables, these invoke functions.
+//Each expects a user data structure with a header followed by n functors
+//as the upvalue. This allows for handling of overloaded functions with
+//different signatures
+//////////////////////////////////////////////////////////////////////////
+struct L2CInvokeHeader
+{
+	int32_t m_num_functions;
+	L2CFunction* m_functions[1];
+};
+int l2cinternal_function_invoke(lua_State* L)
+{
+	L2CInvokeHeader* functions = (L2CInvokeHeader*)lua_touserdata(L,lua_upvalueindex(1));
+	if (!functions)
+		luaL_error(L, "Invalid variable access");
+	for (int i = 0; i < functions->m_num_functions; i++)
+	{
+		if (functions->m_functions[i]->CheckSig(L))
+		{
+			return functions->m_functions[i]->Invoke(L);
+		}
+	}
+	{
+		char buff[1024]; buff[0]=0;
+		int top = lua_gettop(L);
+		for (int i = 1; i <= top; i++)
+		{
+			const char* tname = lua_typename(L,lua_type(L,i));
+			strcat_s(buff,tname);
+			strcat_s(buff," ");
+		}
+		luaL_error(L, "No overload of %s matches argument list [%s]\n",functions->m_functions[0]->m_config.m_name,buff);
+	}
+	return 0;
+}
 int l2cinternal_create_function_invoke(lua_State* L, L2CFunction* function)
 {
-	lua_pushlightuserdata(L,function);
+	L2CInvokeHeader* header = (L2CInvokeHeader*)lua_newuserdata(L,sizeof(L2CInvokeHeader));
+	header->m_num_functions = 1;
+	header->m_functions[0] = function;
+	lua_pushcclosure(L,l2cinternal_function_invoke,1);
+	return 1;
+}
+int l2cinternal_create_function_invoke(lua_State* L, std::vector<L2CFunction*>& functions)
+{
+	L2CInvokeHeader* header = (L2CInvokeHeader*)lua_newuserdata(L,sizeof(L2CInvokeHeader)+sizeof(L2CFunction*)*(functions.size()-1));
+	header->m_num_functions = (int32_t)functions.size();
+	for (int i = 0; i < header->m_num_functions; i++)
+		header->m_functions[i] = functions[i];
 	lua_pushcclosure(L,l2cinternal_function_invoke,1);
 	return 1;
 }

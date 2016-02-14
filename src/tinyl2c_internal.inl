@@ -34,26 +34,29 @@ public:
 
 	L2CFunction(const Config& config) : m_config(config) {}
 
+	virtual bool CheckSig(lua_State* L) { return false; }
 	virtual int Invoke(lua_State* L) { return 0; }
 };
 
 //////////////////////////////////////////////////////////////////////////
-//The LUA hooks that invoke a variable or function class. They expect the
-//first up value of the call to be a pointer to the class, stored as
-//light user data. Below are the functions used to register them with LUA
+//The LUA hooks that invoke the getter or setter for a variable via
+//a variable functor. The functions expect the first up value to be
+//a pointer to the c++ functor.
 //////////////////////////////////////////////////////////////////////////
 int l2cinternal_variable_get(lua_State* L);
 int l2cinternal_variable_set(lua_State* L);
-int l2cinternal_function_invoke(lua_State* L);
 int l2cinternal_create_variable_get(lua_State* L, L2CVariable* variable);
 int l2cinternal_create_variable_set(lua_State* L, L2CVariable* variable);
-int l2cinternal_create_function_invoke(lua_State* L, L2CFunction* function);
 
 //////////////////////////////////////////////////////////////////////////
-//Include the overly wordy glue code for members and functions
+//Similar but a bit more advanced than variables, these invoke functions.
+//Each expects a user data structure with a header followed by n functors
+//as the upvalue. This allows for handling of overloaded functions with
+//different signatures
 //////////////////////////////////////////////////////////////////////////
-#include "tinyl2c_variableglue.inl"
-#include "tinyl2c_functionglue.inl"
+int l2cinternal_function_invoke(lua_State* L);
+int l2cinternal_create_function_invoke(lua_State* L, L2CFunction* function);
+int l2cinternal_create_function_invoke(lua_State* L, std::vector<L2CFunction*>& functions);
 
 //////////////////////////////////////////////////////////////////////////
 //Register core numeric types
@@ -169,6 +172,38 @@ inline L2CHeader* l2cinternal_createuserdatavalue(lua_State* L, ty& data, bool i
 }
 
 //////////////////////////////////////////////////////////////////////////
+//Similar to above, but just allocates a buffer without filling it in
+//////////////////////////////////////////////////////////////////////////
+template<typename ty>
+inline L2CHeader* l2cinternal_allocuserdatavalue(lua_State* L)
+{
+	//create header
+	L2CHeader* header;
+
+	//allocate a block for header+data, 
+	int headersz = L2C_ALIGNED_SIZE(sizeof(L2CHeader), 16);
+	int sz = headersz + sizeof(ty) + 16;
+	void* buffer = lua_newuserdata(L, sz);
+	header = (L2CHeader*)buffer;
+
+	//set data ptr
+	header->m_data = (ty*)l2c_addandalignptr(buffer,headersz, 16);
+
+	//store type id and stuff in header
+	header->m_type_id = L2CTypeInterface<ty>::Id();
+	header->m_is_reference = false;
+
+	//get the metatable for this type
+	l2cinternal_pushmetatable<ty>(L);
+
+	//set metatable on user data
+	lua_setmetatable(L,-2);
+
+	//return the header
+	return header;
+}
+
+//////////////////////////////////////////////////////////////////////////
 //Checks/casts user data to a given c++ type
 //////////////////////////////////////////////////////////////////////////
 template<typename ty>
@@ -201,7 +236,7 @@ inline bool l2cinternal_isuserdatavalue(lua_State* L, int idx)
 }
 
 template<typename ty>
-inline ty& l2cinternal_touserdatavalue(lua_State* L, int idx)
+inline L2CHeader* l2cinternal_touserdataheader(lua_State* L, int idx)
 {
 	idx = lua_absindex(L,idx);
 
@@ -217,7 +252,7 @@ inline ty& l2cinternal_touserdatavalue(lua_State* L, int idx)
 				{
 					L2CHeader* header = (L2CHeader*)p;
 					lua_pop(L,2);
-					return *(ty*)header->m_data;
+					return header;
 				}
 				lua_getfield(L,-1,"_l2c_inherits");
 				lua_copy(L,-1,-2);
@@ -229,9 +264,13 @@ inline ty& l2cinternal_touserdatavalue(lua_State* L, int idx)
 	}
 
 	luaL_error(L, "Incorrect type");
-	return *((ty*)0);
+	return NULL;
 }
-
+template<typename ty>
+inline ty& l2cinternal_touserdatavalue(lua_State* L, int idx)
+{
+	return *(ty*)l2cinternal_touserdataheader<ty>(L,idx)->m_data;
+}
 
 //////////////////////////////////////////////////////////////////////////
 //Fill out metatable from list of members and functions
@@ -242,7 +281,11 @@ int l2cinternal_meta_newindex(lua_State* L);
 struct L2CTypeRegistry
 {
 	std::vector<L2CVariable*> m_variables;
+	std::vector<L2CVariable*> m_static_variables;
 	std::vector<L2CFunction*> m_functions;
+	std::vector<L2CFunction*> m_static_functions;
+	std::vector<L2CFunction*> m_constructors;
+	L2CFunction* m_destructor;
 };
 
 template<typename ty>
@@ -301,8 +344,45 @@ inline void l2cinternal_fillmetatable(lua_State* L, L2CTypeRegistry& reg)
 	lua_pushcclosure(L, l2cinternal_meta_newindex, 3);
 	lua_setfield(L,metatable_idx,"__newindex");
 
+	//set garbage collection function
+	l2cinternal_create_function_invoke(L,reg.m_destructor);
+	lua_setfield(L,metatable_idx,"__gc");
+
 	//restore stack to just the metatable
 	lua_settop(L,metatable_idx);
+}
+
+//////////////////////////////////////////////////////////////////////////
+//Include the overly wordy glue code for members and functions
+//////////////////////////////////////////////////////////////////////////
+#include "tinyl2c_variableglue.inl"
+#include "tinyl2c_functionglue.inl"
+
+//And an extra bit of glue to define a destructor function
+template<typename ty> class TL2CDestructor : public L2CFunction
+{
+public:
+	TL2CDestructor(Config config) : L2CFunction(config) {}
+	virtual bool CheckSig(lua_State* L)
+	{
+		return lua_gettop(L) == 1 && l2c_is<ty*>(L,-1);
+	}
+	virtual int Invoke(lua_State* L)
+	{
+		L2CHeader* header = l2cinternal_touserdataheader<ty>(L,-1);
+		if (!header->m_is_reference)
+		{
+			ty& instance = *(ty*)header->m_data;
+			instance.~ty();
+		}
+		lua_pop(L,1);
+		return 0;
+	}
+};
+template<typename ty> 
+inline L2CFunction* l2cinternal_builddestructor(L2CFunction::Config config)
+{
+	return new TL2CDestructor<ty>(config);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -317,6 +397,7 @@ public:																														\
 	typedef _ty ty;																											\
 	L2CINTERFACE_ID()																										\
 	static ty			Default()								{ return ty(); }											\
+	static const char*	Name()									{ return #_ty; }											\
 	static const char*	MTName()								{ return "l2c."#_ty; }										\
 	static void			Push(lua_State* L, ty value)			{ l2cinternal_createuserdatavalue<ty>(L,value,false); }		\
 	static bool			Is(lua_State* L, int idx)				{ return l2cinternal_isuserdatavalue<ty>(L,idx); }			\
@@ -329,6 +410,7 @@ public:																														\
 	typedef _ty ty;																											\
 	L2CINTERFACE_ID()																										\
 	static ty*			Default()								{ return NULL; }											\
+	static const char*	Name()									{ return #_ty"*"; }											\
 	static const char*	MTName()								{ return "l2c."#_ty"*"; }									\
 	static void			Push(lua_State* L, ty* value)			{ l2cinternal_createuserdatavalue<ty>(L,*value,true); }		\
 	static bool			Is(lua_State* L, int idx)				{ return l2cinternal_isuserdatavalue<ty>(L,idx); }			\
@@ -339,8 +421,15 @@ public:																														\
 #define L2CINTERNAL_TYPE_DEFINITION_BLOCK_BEGIN()		\
 {														\
 	L2CTypeRegistry reg;
-#define L2CINTERNAL_TYPE_DEFINITION_BLOCK_END()			\
-	l2cinternal_fillmetatable<ty>(L,reg);				\
+
+#define L2CINTERNAL_TYPE_DEFINITION_BLOCK_END()											\
+	reg.m_destructor = l2cinternal_builddestructor<ty>(L2CFunction::Config("_dtor"));	\
+	l2cinternal_fillmetatable<ty>(L,reg);												\
+	if (reg.m_constructors.size())														\
+	{																					\
+		l2cinternal_create_function_invoke(L, reg.m_constructors);						\
+		lua_setglobal(L, L2CTypeInterface<ty>::Name());									\
+	}																					\
 }
 
 

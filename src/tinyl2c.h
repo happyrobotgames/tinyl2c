@@ -103,6 +103,7 @@ template<typename ty> inline ty l2c_to(lua_State* L, int idx)
 #define L2C_INHERITS(name)		l2cinternal_pushmetatable<name>(L);	lua_setfield(L,-2,"_l2c_inherits");
 #define L2C_VARIABLE(name)		reg.m_variables.push_back(l2cinternal_buildvariable<ty, int>( L2CVariable::Config(#name) , offsetof(ty,name)));
 #define L2C_FUNCTION(name)		reg.m_functions.push_back(l2cinternal_buildfunc( L2CFunction::Config(#name) , &ty::name));
+#define L2C_CONSTRUCTOR(...)	reg.m_constructors.push_back(l2cinternal_buildconstructor(L2CFunction::Config("_ctor"), (ty*(*)(__VA_ARGS__))0 ));
 
 
 //////////////////////////////////////////////////////////////////////////

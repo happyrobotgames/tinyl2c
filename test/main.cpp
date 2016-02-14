@@ -22,6 +22,7 @@ struct TestWeakType : public TestBase
 	int Foo3() { return x+y+z; }
 
 	TestWeakType() {}
+	TestWeakType(int b) { x=y=z=b; }
 };
 L2C_TYPEDECL(TestWeakType)
 
@@ -32,12 +33,24 @@ L2C_TYPEDEF_END()
 
 L2C_TYPEDEF_BEGIN(TestWeakType)
 	L2C_INHERITS(TestBase)
+
+	L2C_CONSTRUCTOR()
+	L2C_CONSTRUCTOR(int)
+
 	L2C_VARIABLE(x)
 	L2C_VARIABLE(y)
 	L2C_VARIABLE(z)
+
 	L2C_FUNCTION(Foo)
 	L2C_FUNCTION(Foo2)
 	L2C_FUNCTION(Foo3)
+
+	if (reg.m_constructors.size())
+	{
+		l2cinternal_create_function_invoke(L, reg.m_constructors);
+		lua_setglobal(L, "TestWeakType");
+	}
+
 L2C_TYPEDEF_END()
 
 template<typename ty> void TestNumericType(lua_State* L)

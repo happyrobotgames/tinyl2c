@@ -165,3 +165,70 @@ int l2cinternal_meta_newindex(lua_State* L)
 	//couldn't find it at all, so fail
 	return luaL_error(L, "Member not found");
 }
+
+//////////////////////////////////////////////////////////////////////////
+//L2C lua library / utility functions
+//////////////////////////////////////////////////////////////////////////
+int l2c_printstack(lua_State* L)
+{
+	l2c_printf("----------------------------\n");
+	l2c_printf("LUA Stack:\n");
+	int top = lua_gettop(L);
+	for (int i = 1; i <= top; i++)
+	{
+		lua_pushvalue(L,i);
+		const char* tname = lua_typename(L,lua_type(L,-1));
+		const char* str = lua_tostring(L,-1);
+		if (!str)
+			str = "<unprintable>";
+		l2c_printf("[%d] type=%s, value=%s\n",i,tname,str);
+		lua_pop(L,1);
+	}
+	l2c_printf("----------------------------\n");
+	return 0;
+}
+int l2c_printtable(lua_State* L)
+{
+	return l2c_printtable(L,-1);
+}
+int l2c_printtable(lua_State* L, int idx)
+{
+	int t = lua_absindex(L,idx);
+	lua_pushnil(L);
+	int it = 0;
+	while (lua_next(L, t) != 0) 
+	{
+		const char* tname;
+		const char* str;
+
+		l2c_printf("%d:",it);
+		it++;
+
+		lua_pushvalue(L,-2);
+		tname = lua_typename(L,lua_type(L,-2));
+		str = lua_tostring(L,-1);
+		if (!str)
+			str = "<unprintable>";
+		l2c_printf("\tKEY type=%s, value=%s\n",tname,str);
+		lua_pop(L, 1);
+
+		lua_pushvalue(L,-1);
+		tname = lua_typename(L,lua_type(L,-1));
+		str = lua_tostring(L,-1);
+		if (!str)
+			str = "<unprintable>";
+		l2c_printf("\tVAL type=%s, value=%s\n",tname,str);
+		lua_pop(L, 1);
+
+		lua_pop(L, 1);
+	}
+	return 0;
+}
+int l2c_printobject(lua_State* L)
+{
+	return l2c_printobject(L,-1);
+}
+int l2c_printobject(lua_State* L, int idx)
+{
+	return 0;
+}

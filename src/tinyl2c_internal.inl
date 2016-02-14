@@ -174,16 +174,62 @@ inline L2CHeader* l2cinternal_createuserdatavalue(lua_State* L, ty& data, bool i
 template<typename ty>
 inline bool l2cinternal_isuserdatavalue(lua_State* L, int idx)
 {
-	return luaL_checkudata(L,idx,L2CTypeInterface<ty>::MTName()) != NULL;
+	idx = lua_absindex(L,idx);
+
+	void *p = lua_touserdata(L, idx);
+	if (p != NULL) 
+	{  
+		luaL_getmetatable(L, L2CTypeInterface<ty>::MTName());
+		if (lua_getmetatable(L, idx)) 
+		{  
+			while (!lua_isnil(L, -1))
+			{
+				if (lua_rawequal(L, -2, -1))
+				{
+					lua_pop(L,2);
+					return true;
+				}
+				lua_getfield(L,-1,"_l2c_inherits");
+				lua_copy(L,-1,-2);
+				lua_pop(L,1);
+			}
+			lua_pop(L,1);
+		}
+		lua_pop(L,1);
+	}
+	return false;
 }
 
 template<typename ty>
 inline ty& l2cinternal_touserdatavalue(lua_State* L, int idx)
 {
-	L2CHeader* header = (L2CHeader*)luaL_checkudata(L,idx,L2CTypeInterface<ty>::MTName());
-	if (!header)
-		luaL_error(L, "Incorrect type");
-	return *(ty*)header->m_data;
+	idx = lua_absindex(L,idx);
+
+	void *p = lua_touserdata(L, idx);
+	if (p != NULL) 
+	{  
+		luaL_getmetatable(L, L2CTypeInterface<ty>::MTName());
+		if (lua_getmetatable(L, idx)) 
+		{  
+			while (!lua_isnil(L, -1))
+			{
+				if (lua_rawequal(L, -2, -1))
+				{
+					L2CHeader* header = (L2CHeader*)p;
+					lua_pop(L,2);
+					return *(ty*)header->m_data;
+				}
+				lua_getfield(L,-1,"_l2c_inherits");
+				lua_copy(L,-1,-2);
+				lua_pop(L,1);
+			}
+			lua_pop(L,1);
+		}
+		lua_pop(L,1);
+	}
+
+	luaL_error(L, "Incorrect type");
+	return *((ty*)0);
 }
 
 

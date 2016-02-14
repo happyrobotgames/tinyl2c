@@ -89,6 +89,9 @@ template<typename ty> inline ty l2c_to(lua_State* L, int idx)
 //Type definition macros
 //////////////////////////////////////////////////////////////////////////
 
+//place inside your class to specify you will be exposing private members to LUA
+#define L2C_EXPOSE_PRIVATE(_ty)		friend class L2CTypeInterface<_ty>;
+
 //place after your class declaration to link class to LUA
 #define L2C_TYPEDECL(_ty)			L2CINTERNAL_TYPE_DECLARE(_ty)
 
@@ -101,10 +104,19 @@ template<typename ty> inline ty l2c_to(lua_State* L, int idx)
 
 //L2C definition macros
 #define L2C_INHERITS(name)		l2cinternal_pushmetatable<name>(L);	lua_setfield(L,-2,"_l2c_inherits");
-#define L2C_VARIABLE(name)		reg.m_variables.push_back(l2cinternal_buildvariable<ty, int>( L2CVariable::Config(#name) , offsetof(ty,name)));
+#define L2C_VARIABLE(name)		reg.m_variables.push_back(l2cinternal_buildvariable<ty, decltype(ty::name)>( L2CVariable::Config(#name) , offsetof(ty,name)));
 #define L2C_FUNCTION(name)		reg.m_functions.push_back(l2cinternal_buildfunc( L2CFunction::Config(#name) , &ty::name));
 #define L2C_CONSTRUCTOR(...)	reg.m_constructors.push_back(l2cinternal_buildconstructor(L2CFunction::Config("_ctor"), (ty*(*)(__VA_ARGS__))0 ));
 
+//Definitions of operators. To keep it simple, each expects you to specify the return type and all argument types
+#define L2C_OP_ADD(res_ty,a_ty,b_ty)	reg.m_add.push_back(new TL2CBinaryAdd<res_ty, a_ty, b_ty>(L2CFunction::Config("+")));
+#define L2C_OP_SUB(res_ty,a_ty,b_ty)	reg.m_sub.push_back(new TL2CBinarySub<res_ty, a_ty, b_ty>(L2CFunction::Config("-")));
+#define L2C_OP_MUL(res_ty,a_ty,b_ty)	reg.m_mul.push_back(new TL2CBinaryMul<res_ty, a_ty, b_ty>(L2CFunction::Config("*")));
+#define L2C_OP_DIV(res_ty,a_ty,b_ty)	reg.m_div.push_back(new TL2CBinaryDiv<res_ty, a_ty, b_ty>(L2CFunction::Config("/")));
+#define L2C_OP_UNM(res_ty,a_ty)			reg.m_unm.push_back(new TL2CUnaryNeg<res_ty, a_ty>(L2CFunction::Config("-")));
+
+//to initialize L2C with knowledge of some types, call L2C_REGISTER on each one
+#define L2C_REGISTER(_L,_ty)	{ l2cinternal_pushmetatable<_ty>(_L); lua_pop(_L,1); }
 
 //////////////////////////////////////////////////////////////////////////
 //Very rough example!
@@ -112,19 +124,26 @@ template<typename ty> inline ty l2c_to(lua_State* L, int idx)
 #if 0
 
 //in header
-struct MyStruct
+struct MyStruct : public MyBaseClass
 {
+	MyStruct() { x=y=0;}
+	MyStruct(int bla) { x=y=bla;}
 	int x;
 	int y;
 	void Foo() { x=10; };
+	MyStruct operator*(int c) { MyStruct res; res.x = x*c; res.y = y*c; return res; }
 }
 L2C_TYPEDECL(MyStruct)
 
 //in cpp file
 L2C_TYPEDEF_BEGIN(MyStruct)
-	L2C_VARIABLE(x)
-	L2C_VARIABLE(y)
-	L2C_FUNCTION(Foo)
+	L2C_CONSTRUCTOR()					//default constructor
+	L2C_CONSTRUCTOR(int)				//constructor that takes an int
+	L2C_INHERITS(MyBaseClass)			//tell l2c who we inherit from
+	L2C_VARIABLE(x)						//expose member variable
+	L2C_VARIABLE(y)						//expose member variable
+	L2C_FUNCTION(Foo)					//expose member function
+	L2C_OP_MUL(MyStruct,MyStruct,int)	//expose multiply operator that returns MyStruct and takes MyStruct and int as parameters
 L2C_TYPEDEF_END()
 
 #endif

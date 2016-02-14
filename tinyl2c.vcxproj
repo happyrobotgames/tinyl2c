@@ -180,6 +180,7 @@
   <ItemGroup>
     <None Include="src\tinyl2c_functionglue.inl" />
     <None Include="src\tinyl2c_internal.inl" />
+    <None Include="src\tinyl2c_operatorglue.inl" />
     <None Include="src\tinyl2c_variableglue.inl" />
     <None Include="test\console.lua" />
   </ItemGroup>

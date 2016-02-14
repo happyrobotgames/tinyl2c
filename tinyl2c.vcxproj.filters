@@ -131,6 +131,9 @@
     <None Include="src\tinyl2c_internal.inl">
       <Filter>src</Filter>
     </None>
+    <None Include="src\tinyl2c_operatorglue.inl">
+      <Filter>src</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\tinyl2c.h">

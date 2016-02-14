@@ -187,7 +187,7 @@ inline L2CFunction* l2cinternal_buildfunc(L2CFunction::Config config, void (ty::
 
 
 //constructor ty(arg0_ty)
-//LUA stack inputs: 0
+//LUA stack inputs: 1
 //LUA stack outputs: 1
 template<typename ty, typename arg0_ty> class TL2CFunc_Construct_1 : public L2CFunction
 {
@@ -211,4 +211,31 @@ template<typename ty, typename arg0_ty>
 inline L2CFunction* l2cinternal_buildconstructor(L2CFunction::Config config, ty* (*func)(arg0_ty))
 {
 	return new TL2CFunc_Construct_1<ty,arg0_ty>(config,func);
+}
+
+//constructor ty(arg0_ty)
+//LUA stack inputs: 3
+//LUA stack outputs: 1
+template<typename ty, typename arg0_ty, typename arg1_ty, typename arg2_ty> class TL2CFunc_Construct_3 : public L2CFunction
+{
+public:
+	typedef ty* (*func_ptr)(arg0_ty,arg1_ty,arg2_ty);
+
+	TL2CFunc_Construct_3(Config config, func_ptr func) : L2CFunction(config) {}
+
+	virtual bool CheckSig(lua_State* L)
+	{
+		return lua_gettop(L) == 3 && l2c_is<arg0_ty>(L,-3) && l2c_is<arg1_ty>(L,-2) && l2c_is<arg2_ty>(L,-1);
+	}
+	virtual int Invoke(lua_State* L)
+	{
+		void* addr = l2cinternal_allocuserdatavalue<ty>(L)->m_data;
+		new (addr) ty(l2c_to<arg0_ty>(L,-4),l2c_to<arg1_ty>(L,-3),l2c_to<arg2_ty>(L,-2));
+		return 1;
+	}
+};
+template<typename ty, typename arg0_ty, typename arg1_ty, typename arg2_ty> 
+inline L2CFunction* l2cinternal_buildconstructor(L2CFunction::Config config, ty* (*func)(arg0_ty,arg1_ty,arg2_ty))
+{
+	return new TL2CFunc_Construct_3<ty,arg0_ty,arg1_ty,arg2_ty>(config,func);
 }

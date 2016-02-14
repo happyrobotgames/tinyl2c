@@ -273,11 +273,8 @@ inline ty& l2cinternal_touserdatavalue(lua_State* L, int idx)
 }
 
 //////////////////////////////////////////////////////////////////////////
-//Fill out metatable from list of members and functions
+//Meta table setup and callbacks
 //////////////////////////////////////////////////////////////////////////
-int l2cinternal_meta_index(lua_State* L);
-int l2cinternal_meta_newindex(lua_State* L);
-
 struct L2CTypeRegistry
 {
 	std::vector<L2CVariable*> m_variables;
@@ -285,78 +282,23 @@ struct L2CTypeRegistry
 	std::vector<L2CFunction*> m_functions;
 	std::vector<L2CFunction*> m_static_functions;
 	std::vector<L2CFunction*> m_constructors;
+	std::vector<L2CFunction*> m_add;
+	std::vector<L2CFunction*> m_sub;
+	std::vector<L2CFunction*> m_mul;
+	std::vector<L2CFunction*> m_div;
+	std::vector<L2CFunction*> m_unm;
 	L2CFunction* m_destructor;
 };
-
-template<typename ty>
-inline void l2cinternal_fillmetatable(lua_State* L, L2CTypeRegistry& reg)
-{
-	 //get metatable index (assumed on top of stack)
-	int metatable_idx = lua_gettop(L);
-
-	//load inheritance pointer idx
-	lua_getfield(L,metatable_idx,"_l2c_inherits");
-	int inherits_idx = lua_gettop(L);
-
-	//create a table for members and a table for functions
-	lua_newtable(L);
-	int gettertable_idx = lua_gettop(L);
-	lua_newtable(L);
-	int settertable_idx = lua_gettop(L);
-	lua_newtable(L);
-	int functiontable_idx = lua_gettop(L);
-
-	//fill them out
-	for (int i = 0; i < reg.m_variables.size(); i++)
-	{
-		l2cinternal_create_variable_get(L,reg.m_variables[i]);
-		lua_setfield(L,gettertable_idx,reg.m_variables[i]->m_config.m_name);
-		l2cinternal_create_variable_set(L,reg.m_variables[i]);
-		lua_setfield(L,settertable_idx,reg.m_variables[i]->m_config.m_name);
-	}
-	for (int i = 0; i < reg.m_functions.size(); i++)
-	{
-		l2cinternal_create_function_invoke(L,reg.m_functions[i]);
-		lua_setfield(L,functiontable_idx,reg.m_functions[i]->m_config.m_name);
-	}
-
-	//store the tables in the metatable for safe keeping
-	lua_pushvalue(L, gettertable_idx);
-	lua_setfield(L, metatable_idx, "_l2c_getters");
-	lua_pushvalue(L, settertable_idx);
-	lua_setfield(L, metatable_idx, "_l2c_setters");
-	lua_pushvalue(L, functiontable_idx);
-	lua_setfield(L, metatable_idx, "_l2c_functions");
-
-	//set index function
-	if (!lua_isnil(L,inherits_idx))	lua_getfield(L,inherits_idx, "__index"); //the index function from the ancestor's metatable
-	else lua_pushnil(L);
-	lua_pushvalue(L, gettertable_idx);
-	lua_pushvalue(L, functiontable_idx);
-	lua_pushcclosure(L, l2cinternal_meta_index, 3);
-	lua_setfield(L,metatable_idx,"__index");
-
-	//set new index function
-	if (!lua_isnil(L,inherits_idx))	lua_getfield(L,inherits_idx, "__newindex"); //the new index function from the ancestor's metatable
-	else lua_pushnil(L);
-	lua_pushvalue(L, settertable_idx);
-	lua_pushvalue(L, functiontable_idx);
-	lua_pushcclosure(L, l2cinternal_meta_newindex, 3);
-	lua_setfield(L,metatable_idx,"__newindex");
-
-	//set garbage collection function
-	l2cinternal_create_function_invoke(L,reg.m_destructor);
-	lua_setfield(L,metatable_idx,"__gc");
-
-	//restore stack to just the metatable
-	lua_settop(L,metatable_idx);
-}
+int l2cinternal_meta_index(lua_State* L);
+int l2cinternal_meta_newindex(lua_State* L);
+void l2cinternal_fillmetatable(lua_State* L, L2CTypeRegistry& reg);
 
 //////////////////////////////////////////////////////////////////////////
-//Include the overly wordy glue code for members and functions
+//Include the overly wordy glue code for variables and functions
 //////////////////////////////////////////////////////////////////////////
 #include "tinyl2c_variableglue.inl"
 #include "tinyl2c_functionglue.inl"
+#include "tinyl2c_operatorglue.inl"
 
 //And an extra bit of glue to define a destructor function
 template<typename ty> class TL2CDestructor : public L2CFunction
@@ -424,7 +366,7 @@ public:																														\
 
 #define L2CINTERNAL_TYPE_DEFINITION_BLOCK_END()											\
 	reg.m_destructor = l2cinternal_builddestructor<ty>(L2CFunction::Config("_dtor"));	\
-	l2cinternal_fillmetatable<ty>(L,reg);												\
+	l2cinternal_fillmetatable(L,reg);													\
 	if (reg.m_constructors.size())														\
 	{																					\
 		l2cinternal_create_function_invoke(L, reg.m_constructors);						\
@@ -437,3 +379,5 @@ public:																														\
 #define L2CINTERNAL_TYPE_DEFINITION_BEGIN(_ty)		void L2CTypeInterface<_ty>::Register(lua_State* L)	L2CINTERNAL_TYPE_DEFINITION_BLOCK_BEGIN()
 #define L2CINTERNAL_TYPE_DEFINITION_BEGIN_INL(_ty)	inline L2CINTERNAL_TYPE_DEFINITION_BEGIN(_ty)
 #define L2CINTERNAL_TYPE_DEFINITION_END()			L2CINTERNAL_TYPE_DEFINITION_BLOCK_END()
+
+

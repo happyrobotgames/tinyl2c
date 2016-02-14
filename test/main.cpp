@@ -3,6 +3,55 @@
 #include <tchar.h>
 #include "../src/tinyl2c.h"
 
+struct V3
+{
+	V3() : x(0), y(0), z(0) {}
+	V3(float _x, float _y, float _z) : x(_x), y(_y), z(_z) {}
+
+	inline V3 operator+(V3 other) const
+	{
+		V3 res = *this;
+		res.x += other.x;
+		res.y += other.y;
+		res.z += other.z;
+		return res;
+	}
+	inline V3 operator-() const
+	{
+		V3 res = *this;
+		res.x = -res.x;
+		res.y = -res.y;
+		res.z = -res.z;
+		return res;
+	}
+
+private:
+	float x,y,z;
+
+	friend class L2CTypeInterface<V3>;
+	
+};
+L2C_TYPEDECL(V3)
+
+/*
+inline V3 operator*(V3 a, float b)
+{
+	V3 res = a;
+	res.x *= b;
+	res.y *= b;
+	res.z *= b;
+	return res;
+}
+inline V3 operator*(float a, V3 b)
+{
+	V3 res = b;
+	res.x *= a;
+	res.y *= a;
+	res.z *= a;
+	return res;
+}
+*/
+
 struct TestBase
 {
 	int hello = 7;
@@ -11,7 +60,7 @@ struct TestBase
 };
 L2C_TYPEDECL(TestBase)
 
-struct TestWeakType : public TestBase
+struct Test : public TestBase
 {
 	int x = 0;
 	int y = 2;
@@ -21,17 +70,30 @@ struct TestWeakType : public TestBase
 	void Foo2(int v) { x = v; y = v; z = v; }
 	int Foo3() { return x+y+z; }
 
-	TestWeakType() {}
-	TestWeakType(int b) { x=y=z=b; }
+	Test() {}
+	Test(int b) { x=y=z=b; }
 };
-L2C_TYPEDECL(TestWeakType)
+L2C_TYPEDECL(Test)
+
+L2C_TYPEDEF_BEGIN(V3)
+	L2C_CONSTRUCTOR()
+	L2C_CONSTRUCTOR(float,float,float)
+	L2C_VARIABLE(x)
+	L2C_VARIABLE(y)
+	L2C_VARIABLE(z)
+	L2C_OP_ADD(V3,V3,V3)
+	//L2C_OP_MUL(V3,V3,float)
+	//L2C_OP_MUL(V3,float,V3)
+	L2C_OP_UNM(V3,V3)
+
+L2C_TYPEDEF_END()
 
 L2C_TYPEDEF_BEGIN(TestBase)
 	L2C_VARIABLE(hello)
 	L2C_FUNCTION(BaseFoo)
 L2C_TYPEDEF_END()
 
-L2C_TYPEDEF_BEGIN(TestWeakType)
+L2C_TYPEDEF_BEGIN(Test)
 	L2C_INHERITS(TestBase)
 
 	L2C_CONSTRUCTOR()
@@ -44,12 +106,6 @@ L2C_TYPEDEF_BEGIN(TestWeakType)
 	L2C_FUNCTION(Foo)
 	L2C_FUNCTION(Foo2)
 	L2C_FUNCTION(Foo3)
-
-	if (reg.m_constructors.size())
-	{
-		l2cinternal_create_function_invoke(L, reg.m_constructors);
-		lua_setglobal(L, "TestWeakType");
-	}
 
 L2C_TYPEDEF_END()
 
@@ -68,31 +124,7 @@ int ptest(lua_State* L)
 	TestNumericType<int8_t>(L);
 	TestNumericType<float32_t>(L);
 
-	{
-		TestWeakType mytype;
-		l2c_push(L, mytype);
-		mytype.y = 20;
-		TestWeakType res = l2c_to<TestWeakType>(L,-1);
-		lua_pop(L,1);
-	}
-
-	
-	{
-		TestWeakType mytype;
-		l2c_push(L, &mytype);
-		mytype.y = 30;
-		TestWeakType res = l2c_to<TestWeakType>(L,-1);
-		lua_pop(L,1);
-	}
-
 	return 0;
-}
-
-int gettesttype(lua_State* L)
-{
-	TestWeakType t;
-	l2c_push(L,t);
-	return 1;
 }
 
 int main(int argc, _TCHAR* argv[])
@@ -100,8 +132,11 @@ int main(int argc, _TCHAR* argv[])
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
 
-	lua_pushcfunction(L,gettesttype);
-	lua_setglobal(L,"gettesttype");
+	L2C_REGISTER(L,Test);
+	L2C_REGISTER(L,V3);
+
+	lua_pushcfunction(L,l2c_printobject);
+	lua_setglobal(L,"printobject");
 
 	lua_pushcfunction(L, ptest);
 	if (lua_pcall(L, 0, 0, 0) != LUA_OK)

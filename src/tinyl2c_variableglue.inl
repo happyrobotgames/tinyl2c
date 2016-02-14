@@ -1,8 +1,6 @@
-//////////////////////////////////////////////////////////////////////////
-//Template to generate get and set functions to access a member
-//of a class
-//////////////////////////////////////////////////////////////////////////
-template<typename ty, typename member_ty> class TL2CVariable : public L2CVariable
+
+//member variable
+template<typename ty, typename var_ty> class TL2CVariable : public L2CVariable
 {
 public:
 	int m_offset;
@@ -12,8 +10,8 @@ public:
 	virtual int Set(lua_State* L)
 	{
 		ty* instance		= l2c_to<ty*>(L,-2);
-		member_ty* member	= (member_ty*)l2c_addptr(instance,m_offset);
-		*member				= l2c_to<member_ty>(L,-1);
+		var_ty* member		= (var_ty*)l2c_addptr(instance,m_offset);
+		*member				= l2c_to<var_ty>(L,-1);
 		lua_pop(L,2);
 		return 0;
 	}
@@ -21,15 +19,42 @@ public:
 	virtual int Get(lua_State* L)
 	{
 		ty* instance		= l2c_to<ty*>(L,-1);
-		member_ty* member	= (member_ty*)l2c_addptr(instance,m_offset);
+		var_ty* member		= (var_ty*)l2c_addptr(instance,m_offset);
 		l2c_push(L,*member);
 		lua_copy(L,-1,-2);
 		lua_pop(L,1);
 		return 1;
 	}
 };
-template<typename ty, typename member_ty> 
+template<typename ty, typename var_ty> 
 inline L2CVariable* l2cinternal_buildvariable(L2CVariable::Config config, int offset)
 {
-	return new TL2CVariable<ty, member_ty>(config,offset);
+	return new TL2CVariable<ty, var_ty>(config,offset);
+}
+
+//global variable
+template<typename var_ty> class TL2CGlobalVariable : public L2CVariable
+{
+public:
+	var_ty* m_variable;
+
+	TL2CGlobalVariable(Config config, var_ty* variable) : L2CVariable(config), m_variable(variable) {}
+
+	virtual int Set(lua_State* L)
+	{
+		*m_variable	= l2c_to<var_ty>(L,-1);
+		lua_pop(L,1);
+		return 0;
+	}
+
+	virtual int Get(lua_State* L)
+	{
+		l2c_push(L,*m_variable);
+		return 1;
+	}
+};
+template<typename var_ty> 
+inline L2CVariable* l2cinternal_buildglobalvariable(L2CVariable::Config config, int offset)
+{
+	return new TL2CGlobalVariable<var_ty>(config,offset);
 }

@@ -2,7 +2,7 @@
 
 //////////////////////////////////////////////////////////////////////////
 //Base classes for variable access and function invocation. This are
-//overridden using template specialization in the 2 glue files below
+//overridden using template specialization below
 //////////////////////////////////////////////////////////////////////////
 class L2CVariable
 {
@@ -61,16 +61,18 @@ int l2cinternal_create_function_invoke(lua_State* L, std::vector<L2CFunction*>& 
 //////////////////////////////////////////////////////////////////////////
 //Register core numeric types
 //////////////////////////////////////////////////////////////////////////
-#define L2CNUMERICTYPE(ty)																			\
-template<> class L2CTypeInterface<ty>																\
-{																									\
-public:																								\
-	L2CINTERFACE_ID()																				\
-	static ty			Default()						{ return 0; }								\
-	static const char*	MTName()						{ return "l2c."#ty; }						\
-	static void			Push(lua_State* L, ty value)	{ lua_pushnumber(L,(lua_Number)value); }	\
-	static bool			Is(lua_State* L, int idx)		{ return lua_isnumber(L,idx) != 0; }		\
-	static ty			To(lua_State* L, int idx)		{ return (ty)lua_tonumber(L, idx); }		\
+#define L2CNUMERICTYPE(ty)																				\
+template<> class L2CTypeInterface<ty>																	\
+{																										\
+public:																									\
+	typedef ty reference_ty;																			\
+	L2CINTERFACE_ID()																					\
+	static ty			Default()							{ return 0; }								\
+	static const char*	MTName()							{ return "l2c."#ty; }						\
+	static void			PushVal(lua_State* L, ty value)		{ lua_pushnumber(L,(lua_Number)value); }	\
+	static void			PushRef(lua_State* L, ty& value)	{ lua_pushnumber(L,(lua_Number)value); }	\
+	static bool			Is(lua_State* L, int idx)			{ return lua_isnumber(L,idx) != 0; }		\
+	static ty			To(lua_State* L, int idx)			{ return (ty)lua_tonumber(L, idx); }		\
 }
 L2CNUMERICTYPE(int8_t);
 L2CNUMERICTYPE(uint8_t);
@@ -90,11 +92,13 @@ template<> class L2CTypeInterface<const char*>
 {																									
 public:																								
 	L2CINTERFACE_ID()
-	static const char*	Default()								{ return ""; }								
-	static const char*	MTName()								{ return "l2c.charptr"; }
-	static void			Push(lua_State* L, const char* value)	{ lua_pushstring(L,value); }	
-	static bool			Is(lua_State* L, int idx)				{ return lua_isstring(L,idx) != 0; }		
-	static const char*	To(lua_State* L, int idx)				{ return lua_tostring(L, idx); }		
+	typedef const char* reference_ty;
+	static const char*	Default()									{ return ""; }								
+	static const char*	MTName()									{ return "l2c.charptr"; }
+	static void			PushVal(lua_State* L, const char* value)	{ lua_pushstring(L,value); }	
+	static void			PushRef(lua_State* L, const char* value)	{ lua_pushstring(L,value); }	
+	static bool			Is(lua_State* L, int idx)					{ return lua_isstring(L,idx) != 0; }		
+	static const char*	To(lua_State* L, int idx)					{ return lua_tostring(L, idx); }		
 };
 
 
@@ -133,6 +137,9 @@ inline int l2cinternal_pushmetatable(lua_State* L)
 template<typename ty>
 inline L2CHeader* l2cinternal_createuserdatavalue(lua_State* L, ty& data, bool is_reference)
 {
+	//create the table that will hold this user data
+	lua_newtable(L);
+
 	//create header
 	L2CHeader* header;
 	if (is_reference)
@@ -161,10 +168,13 @@ inline L2CHeader* l2cinternal_createuserdatavalue(lua_State* L, ty& data, bool i
 	header->m_type_id = L2CTypeInterface<ty>::Id();
 	header->m_is_reference = is_reference;
 
+	//store the user data as a member of the table
+	lua_setfield(L,-2,"_l2c_data");
+
 	//get the metatable for this type
 	l2cinternal_pushmetatable<ty>(L);
 
-	//set metatable on user data
+	//set metatable on the table
 	lua_setmetatable(L,-2);
 
 	//return the header
@@ -177,6 +187,9 @@ inline L2CHeader* l2cinternal_createuserdatavalue(lua_State* L, ty& data, bool i
 template<typename ty>
 inline L2CHeader* l2cinternal_allocuserdatavalue(lua_State* L)
 {
+	//create the table that will hold this user data
+	lua_newtable(L);
+
 	//create header
 	L2CHeader* header;
 
@@ -193,10 +206,13 @@ inline L2CHeader* l2cinternal_allocuserdatavalue(lua_State* L)
 	header->m_type_id = L2CTypeInterface<ty>::Id();
 	header->m_is_reference = false;
 
+	//store the user data as a member of the table
+	lua_setfield(L,-2,"_l2c_data");
+
 	//get the metatable for this type
 	l2cinternal_pushmetatable<ty>(L);
 
-	//set metatable on user data
+	//set metatable on the table
 	lua_setmetatable(L,-2);
 
 	//return the header
@@ -211,8 +227,7 @@ inline bool l2cinternal_isuserdatavalue(lua_State* L, int idx)
 {
 	idx = lua_absindex(L,idx);
 
-	void *p = lua_touserdata(L, idx);
-	if (p != NULL) 
+	if (lua_istable(L,idx)) 
 	{  
 		luaL_getmetatable(L, L2CTypeInterface<ty>::MTName());
 		if (lua_getmetatable(L, idx)) 
@@ -240,8 +255,7 @@ inline L2CHeader* l2cinternal_touserdataheader(lua_State* L, int idx)
 {
 	idx = lua_absindex(L,idx);
 
-	void *p = lua_touserdata(L, idx);
-	if (p != NULL) 
+	if (lua_istable(L,idx)) 
 	{  
 		luaL_getmetatable(L, L2CTypeInterface<ty>::MTName());
 		if (lua_getmetatable(L, idx)) 
@@ -250,8 +264,9 @@ inline L2CHeader* l2cinternal_touserdataheader(lua_State* L, int idx)
 			{
 				if (lua_rawequal(L, -2, -1))
 				{
-					L2CHeader* header = (L2CHeader*)p;
-					lua_pop(L,2);
+					lua_getfield(L,idx,"_l2c_data");
+					L2CHeader* header = (L2CHeader*)lua_touserdata(L,-1);
+					lua_pop(L,3);
 					return header;
 				}
 				lua_getfield(L,-1,"_l2c_inherits");
@@ -277,6 +292,7 @@ inline ty& l2cinternal_touserdatavalue(lua_State* L, int idx)
 //////////////////////////////////////////////////////////////////////////
 struct L2CTypeRegistry
 {
+	const char* m_name;
 	std::vector<L2CVariable*> m_variables;
 	std::vector<L2CVariable*> m_static_variables;
 	std::vector<L2CFunction*> m_functions;
@@ -317,7 +333,13 @@ public:
 	{
 		ty* instance		= l2c_to<ty*>(L,-1);
 		var_ty* member		= (var_ty*)l2c_addptr(instance,m_offset);
-		l2c_push(L,*member);
+		l2c_pushref(L,*member);
+		if (lua_istable(L,-1))
+		{
+			lua_pushstring(L, "_l2c_lifetime");
+			lua_pushvalue(L, -3);
+			lua_rawset(L, -3);
+		}
 		lua_copy(L,-1,-2);
 		lua_pop(L,1);
 		return 1;
@@ -348,7 +370,7 @@ public:
 		a_ty a = l2c_to<a_ty>(L,-1);
 		res_ty res = Op(a);
 		lua_pop(L,2);
-		l2c_push(L,res);
+		l2c_pushval(L,res);
 		return 1;
 	}
 };
@@ -379,7 +401,7 @@ public:
 		b_ty b = l2c_to<b_ty>(L,-1);
 		res_ty res = Op(a,b);
 		lua_pop(L,2);
-		l2c_push(L,res);
+		l2c_pushval(L,res);
 		return 1;
 	}
 };
@@ -408,8 +430,10 @@ public:
 	virtual res_ty Op(a_ty a, b_ty b) { return a / b; }
 };
 
+//////////////////////////////////////////////////////////////////////////
 //Use the function glue generator to build the different functors
 //these build member, global and constructor functions for between 0 and 15 arguments
+//////////////////////////////////////////////////////////////////////////
 #define FDEF_ARG_COUNT 0
 #include "tinyl2c_functionglue_preproc.inl"
 #define FDEF_ARG_COUNT 1
@@ -480,11 +504,13 @@ template<> class L2CTypeInterface<_ty>																						\
 {																															\
 public:																														\
 	typedef _ty ty;																											\
+	typedef ty& reference_ty;																								\
 	L2CINTERFACE_ID()																										\
 	static ty			Default()								{ return ty(); }											\
 	static const char*	Name()									{ return #_ty; }											\
 	static const char*	MTName()								{ return "l2c."#_ty; }										\
-	static void			Push(lua_State* L, ty value)			{ l2cinternal_createuserdatavalue<ty>(L,value,false); }		\
+	static void			PushVal(lua_State* L, ty value)			{ l2cinternal_createuserdatavalue<ty>(L,value,false); }		\
+	static void			PushRef(lua_State* L, ty& value)		{ l2cinternal_createuserdatavalue<ty>(L,value,true); }		\
 	static bool			Is(lua_State* L, int idx)				{ return l2cinternal_isuserdatavalue<ty>(L,idx); }			\
 	static ty			To(lua_State* L, int idx)				{ return l2cinternal_touserdatavalue<ty>(L,idx); }			\
 	static void			Register(lua_State* L);																				\
@@ -493,11 +519,13 @@ template<> class L2CTypeInterface<_ty*>																						\
 {																															\
 public:																														\
 	typedef _ty ty;																											\
+	typedef ty* reference_ty;																								\
 	L2CINTERFACE_ID()																										\
 	static ty*			Default()								{ return NULL; }											\
 	static const char*	Name()									{ return #_ty"*"; }											\
 	static const char*	MTName()								{ return "l2c."#_ty"*"; }									\
-	static void			Push(lua_State* L, ty* value)			{ l2cinternal_createuserdatavalue<ty>(L,*value,true); }		\
+	static void			PushVal(lua_State* L, ty* value)		{ l2cinternal_createuserdatavalue<ty>(L,*value,true); }		\
+	static void			PushRef(lua_State* L, ty* value)		{ l2cinternal_createuserdatavalue<ty>(L,*value,true); }		\
 	static bool			Is(lua_State* L, int idx)				{ return l2cinternal_isuserdatavalue<ty>(L,idx); }			\
 	static ty*			To(lua_State* L, int idx)				{ return &l2cinternal_touserdatavalue<ty>(L,idx); }			\
 };
@@ -509,6 +537,7 @@ public:																														\
 
 #define L2CINTERNAL_TYPE_DEFINITION_BLOCK_END()											\
 	reg.m_destructor = l2cinternal_builddestructor<ty>(L2CFunction::Config("_dtor"));	\
+	reg.m_name = L2CTypeInterface<ty>::Name();											\
 	l2cinternal_fillmetatable(L,reg);													\
 	if (reg.m_constructors.size())														\
 	{																					\

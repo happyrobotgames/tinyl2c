@@ -65,10 +65,13 @@ struct Test : public TestBase
 	int x = 0;
 	int y = 2;
 	int z = 4;
+	V3 val;
 
 	void Foo() { x = 1; y = 3; z = 4; }
 	void Foo2(int v) { x = v; y = v; z = v; }
 	int Foo3() { return x+y+z; }
+	V3 GetVal() { return val; }
+	V3* GetValRef() { return &val; }
 
 	Test() {}
 	Test(int b) { x=y=z=b; }
@@ -102,17 +105,20 @@ L2C_TYPEDEF_BEGIN(Test)
 	L2C_VARIABLE(x)
 	L2C_VARIABLE(y)
 	L2C_VARIABLE(z)
+	L2C_VARIABLE(val)
 
 	L2C_FUNCTION(Foo)
 	L2C_FUNCTION(Foo2)
 	L2C_FUNCTION(Foo3)
+	L2C_FUNCTION(GetVal)
+	L2C_FUNCTION(GetValRef)
 
 L2C_TYPEDEF_END()
 
 template<typename ty> void TestNumericType(lua_State* L)
 {
 	ty val = 10;
-	l2c_push(L, val);
+	l2c_pushval(L, val);
 	bool isres = l2c_is<ty>(L, -1);
 	ty tores = l2c_to<ty>(L, -1);
 	lua_pop(L, 1);
@@ -139,12 +145,15 @@ int main(int argc, _TCHAR* argv[])
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
 
-	L2C_ADD_GLOBAL_VARIABLE(L,gTest);
-	L2C_ADD_GLOBAL_FUNCTION(L,TestFunc);
-	L2C_ADD_TYPE(L,V3);
+	l2c_addglobal(L,gTest);
+	l2c_addglobalfunction(L,TestFunc);
+	l2c_addtype<V3>(L);
 
 	lua_pushcfunction(L,l2c_printobject);
 	lua_setglobal(L,"printobject");
+
+	lua_pushcfunction(L,l2c_printtable);
+	lua_setglobal(L,"printtable");
 
 	lua_pushcfunction(L, ptest);
 	if (lua_pcall(L, 0, 0, 0) != LUA_OK)

@@ -55,30 +55,67 @@ typedef double float64_t;
 template<typename ty> class L2CTypeInterface
 {
 public:
+	typedef ty reference_ty;
 	L2CINTERFACE_ID()
-	static ty			Default()						{ return ty(); }
-	static const char*	MTName()						{ return "l2c.unknown"; }
-	static void			Push(lua_State* L, ty value)	{ luaL_error(L, "Unknown type"); }
-	static bool			Is(lua_State* L, int idx)		{ luaL_error(L, "Unknown type"); return false; }
-	static ty			To(lua_State* L, int idx)		{ luaL_error(L, "Unknown type"); return Default(); }
+	static ty			Default()							{ return ty(); }
+	static const char*	MTName()							{ return "l2c.unknown"; }
+	static void			PushVal(lua_State* L, ty value)		{ luaL_error(L, "Unknown type"); }
+	static void			PushRef(lua_State* L, ty& value)	{ luaL_error(L, "Unknown type"); }
+	static bool			Is(lua_State* L, int idx)			{ luaL_error(L, "Unknown type"); return false; }
+	static ty			To(lua_State* L, int idx)			{ luaL_error(L, "Unknown type"); return Default(); }
 };
+#define l2c_refty(_ty) typename L2CTypeInterface<_ty>::reference_ty
 
 //////////////////////////////////////////////////////////////////////////
 //Core functions to achieve push/is/to functionality on any
 //type registered with L2C
 //////////////////////////////////////////////////////////////////////////
-template<typename ty> inline void l2c_push(lua_State* L, ty value)
+
+//push a copy of a value into lua
+//eg l2c_pushval(L,myvalue)
+template<typename ty> inline void l2c_pushval(lua_State* L, ty value)
 {
-	L2CTypeInterface<ty>::Push(L, value);
+	L2CTypeInterface<ty>::PushVal(L, value);
 }
+
+//push a reference to a value (just its address is stored) into lua
+//eg l2c_pushval(L,myvalue)
+template<typename ty> inline void l2c_pushref(lua_State* L, ty& value)
+{
+	L2CTypeInterface<ty>::PushRef(L, value);
+}
+
+//check if a value at a given point on the stack is of a given type
+//eg if(l2c_is<MyType>(L,-1)) {}
 template<typename ty> inline bool l2c_is(lua_State* L, int idx)
 {
 	return L2CTypeInterface<ty>::Is(L, idx);
 }
-template<typename ty> inline ty l2c_to(lua_State* L, int idx)
+
+//copy a value out of lua
+template<typename ty> inline l2c_refty(ty) l2c_to(lua_State* L, int idx)
 {
 	return L2CTypeInterface<ty>::To(L, idx);
 }
+
+//////////////////////////////////////////////////////////////////////////
+//Some extra utility functions
+//////////////////////////////////////////////////////////////////////////
+
+//to notify l2c about any types without registering them through pushing global variables/functions
+//use l2c_addtype<type> to add them to the registry in advance. this allows their constructors to
+//be called by lua code
+template<typename ty> 
+inline void l2c_addtype(lua_State* L) {	l2cinternal_pushmetatable<ty>(L); lua_pop(L,1); }
+
+//helper to register a global variable
+#define l2c_addglobal(_L, _variable) { l2c_pushref(_L,_variable); lua_setglobal(_L,#_variable); }
+
+//generate the functor for a c++ function and push into lua
+#define l2c_pushfunction(_L, _function) l2cinternal_create_function_invoke(L,l2cinternal_buildglobalfunc(L2CFunction::Config(#_function),&_function))
+
+//same as above, but also registers it as a global function call
+#define l2c_addglobalfunction(_L, _function) { l2cinternal_create_function_invoke(L,l2cinternal_buildglobalfunc(L2CFunction::Config(#_function),&_function)); lua_setglobal(_L,#_function); }
 
 //////////////////////////////////////////////////////////////////////////
 //Pull in the internal systems
@@ -115,22 +152,13 @@ template<typename ty> inline ty l2c_to(lua_State* L, int idx)
 #define L2C_OP_DIV(res_ty,a_ty,b_ty)	reg.m_div.push_back(new TL2CBinaryDiv<res_ty, a_ty, b_ty>(L2CFunction::Config("/")));
 #define L2C_OP_UNM(res_ty,a_ty)			reg.m_unm.push_back(new TL2CUnaryNeg<res_ty, a_ty>(L2CFunction::Config("-")));
 
-//Register global variables
-#define L2C_ADD_GLOBAL_VARIABLE(_L,_var)		{ l2c_push(L,&_var); lua_setglobal(L,#_var); }
-
-//Register a global function
-#define L2C_ADD_GLOBAL_FUNCTION(_L,_function)	{ l2cinternal_create_function_invoke(L,l2cinternal_buildglobalfunc(L2CFunction::Config(#_function),&_function)); lua_setglobal(L,#_function); }
-
-//to manually initialize L2C with knowledge of some types, call L2C_ADD_TYPE on each one
-#define L2C_ADD_TYPE(_L,_ty)		{ l2cinternal_pushmetatable<_ty>(_L); lua_pop(_L,1); }
-
-
 //////////////////////////////////////////////////////////////////////////
 //Very rough example!
 //////////////////////////////////////////////////////////////////////////
 #if 0
 
 //in header
+#include "tinyl2cinclude.h"
 struct MyStruct : public MyBaseClass
 {
 	MyStruct() { x=y=0;}
@@ -143,6 +171,7 @@ struct MyStruct : public MyBaseClass
 L2C_TYPEDECL(MyStruct)
 
 //in cpp file
+#include "tinyl2c.h"
 L2C_TYPEDEF_BEGIN(MyStruct)
 	L2C_CONSTRUCTOR()					//default constructor
 	L2C_CONSTRUCTOR(int)				//constructor that takes an int

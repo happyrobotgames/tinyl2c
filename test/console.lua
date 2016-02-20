@@ -12,7 +12,7 @@ function exec(line)
 		return
 	end
 	
-	if res != nil then
+	if res ~= nil then
 		print(res)
 	end
 end

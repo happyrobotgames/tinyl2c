@@ -110,6 +110,15 @@ int l2cinternal_create_function_invoke(lua_State* L, std::vector<L2CFunction*>& 
 }
 
 //////////////////////////////////////////////////////////////////////////
+//Really dumb tostring function that just pushes on its first upvalue
+//////////////////////////////////////////////////////////////////////////
+int l2cinternal_tostring(lua_State* L)
+{
+	lua_pushvalue(L,lua_upvalueindex(1));
+	return 1;
+}
+
+//////////////////////////////////////////////////////////////////////////
 //Core table get/set functions. Each expects up values to be:
 //1: inherits from (or nil)
 //2: member table (getters for index, setters for new index)
@@ -292,6 +301,11 @@ void l2cinternal_fillmetatable(lua_State* L, L2CTypeRegistry& reg)
 		l2cinternal_create_function_invoke(L,reg.m_unm);
 		lua_setfield(L,metatable_idx,"__unm");
 	}
+
+	//very simple tostring function
+	lua_pushstring(L,reg.m_name);
+	lua_pushcclosure(L,l2cinternal_tostring,1);
+	lua_setfield(L, metatable_idx, "__tostring");
 
 	//restore stack to just the metatable
 	lua_settop(L,metatable_idx);

@@ -122,16 +122,7 @@
     <None Include="test\console.lua">
       <Filter>test</Filter>
     </None>
-    <None Include="src\tinyl2c_functionglue.inl">
-      <Filter>src</Filter>
-    </None>
-    <None Include="src\tinyl2c_variableglue.inl">
-      <Filter>src</Filter>
-    </None>
     <None Include="src\tinyl2c_internal.inl">
-      <Filter>src</Filter>
-    </None>
-    <None Include="src\tinyl2c_operatorglue.inl">
       <Filter>src</Filter>
     </None>
     <None Include="src\tinyl2c_functionglue_preproc.inl">

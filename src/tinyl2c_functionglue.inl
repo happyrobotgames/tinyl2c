@@ -239,3 +239,5 @@ inline L2CFunction* l2cinternal_buildconstructor(L2CFunction::Config config, ty*
 {
 	return new TL2CFunc_Construct_3<ty,arg0_ty,arg1_ty,arg2_ty>(config,func);
 }
+
+

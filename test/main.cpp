@@ -127,13 +127,21 @@ int ptest(lua_State* L)
 	return 0;
 }
 
+Test gTest;
+
+void TestFunc()
+{
+	gTest.x = 20;
+}
+
 int main(int argc, _TCHAR* argv[])
 {
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
 
-	L2C_REGISTER(L,Test);
-	L2C_REGISTER(L,V3);
+	L2C_ADD_GLOBAL_VARIABLE(L,gTest);
+	L2C_ADD_GLOBAL_FUNCTION(L,TestFunc);
+	L2C_ADD_TYPE(L,V3);
 
 	lua_pushcfunction(L,l2c_printobject);
 	lua_setglobal(L,"printobject");

@@ -427,3 +427,41 @@ int l2c_printobject(lua_State* L, int idx)
 	lua_pop(L,3);
 	return 0;
 }
+
+struct FBindTest
+{
+	FBindTest() {}
+	FBindTest(int) {}
+	FBindTest(int,int) {}
+	FBindTest(int,int,int) {}
+
+	void Func_Void_0() {}
+	void Func_Void_1(int) {}
+	void Func_Void_2(int,int) {}
+	void Func_Void_3(int,int,int) {}
+
+	int Func_Ret_0() { return 0; }
+	int Func_Ret_1(int) { return 0; }
+	int Func_Ret_2(int,int) { return 0; }
+	int Func_Ret_3(int,int,int) { return 0; }
+};
+L2C_TYPEDECL(FBindTest);
+// 
+// L2C_TYPEDEF_BEGIN(FBindTest)
+// 	L2C_CONSTRUCTOR()
+// L2C_TYPEDEF_END()
+
+TL2CMemberFunc_Void_0<FBindTest>*						gpMemberVoidTest0 = NULL;
+TL2CMemberFunc_Void_1<FBindTest,int>*					gpMemberVoidTest1 = NULL;
+TL2CMemberFunc_Void_2<FBindTest,int,int>*				gpMemberVoidTest2 = NULL;
+TL2CMemberFunc_Void_3<FBindTest,int,int,int>*			gpMemberVoidTest3 = NULL;
+TL2CMemberFunc_Void_15<FBindTest,int,int,int,int,int,int,int,int,int,int,int,int,int,int,int>*			gpMemberVoidTest15 = NULL;
+TL2CMemberFunc_Ret_0<FBindTest,float>*				gpMemberRetTest0 = NULL;
+TL2CMemberFunc_Ret_1<FBindTest,float,int>*			gpMemberRetTest1 = NULL;
+TL2CMemberFunc_Ret_2<FBindTest,float,int,int>*		gpMemberRetTest2 = NULL;
+TL2CMemberFunc_Ret_3<FBindTest,float,int,int,int>*	gpMemberRetTest3 = NULL;
+
+TL2CGlobalFunc_Void_0<>*								gpGlobalVoidTest0 = NULL;
+TL2CGlobalFunc_Ret_3<float,int,int,int>*				gpGlobalRetTest3 = NULL;
+
+TL2CConstructorFunc_3<FBindTest,int,int,int>*			gpConstructorTest3 = NULL;

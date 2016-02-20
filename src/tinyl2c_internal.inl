@@ -296,9 +296,152 @@ void l2cinternal_fillmetatable(lua_State* L, L2CTypeRegistry& reg);
 //////////////////////////////////////////////////////////////////////////
 //Include the overly wordy glue code for variables and functions
 //////////////////////////////////////////////////////////////////////////
-#include "tinyl2c_variableglue.inl"
-#include "tinyl2c_functionglue.inl"
-#include "tinyl2c_operatorglue.inl"
+//member variable
+template<typename ty, typename var_ty> class TL2CMemberVariable : public L2CVariable
+{
+public:
+	int m_offset;
+
+	TL2CMemberVariable(Config config, int offset) : L2CVariable(config), m_offset(offset) {}
+
+	virtual int Set(lua_State* L)
+	{
+		ty* instance		= l2c_to<ty*>(L,-2);
+		var_ty* member		= (var_ty*)l2c_addptr(instance,m_offset);
+		*member				= l2c_to<var_ty>(L,-1);
+		lua_pop(L,2);
+		return 0;
+	}
+
+	virtual int Get(lua_State* L)
+	{
+		ty* instance		= l2c_to<ty*>(L,-1);
+		var_ty* member		= (var_ty*)l2c_addptr(instance,m_offset);
+		l2c_push(L,*member);
+		lua_copy(L,-1,-2);
+		lua_pop(L,1);
+		return 1;
+	}
+};
+template<typename ty, typename var_ty> 
+inline L2CVariable* l2cinternal_buildmembervariable(L2CVariable::Config config, int offset)
+{
+	return new TL2CMemberVariable<ty, var_ty>(config,offset);
+}
+
+//////////////////////////////////////////////////////////////////////////
+//Unary operator functions
+//////////////////////////////////////////////////////////////////////////
+template<typename res_ty, typename a_ty> class TL2CUnaryOperator : public L2CFunction
+{
+public:
+	virtual res_ty Op(a_ty a) = 0;
+
+	TL2CUnaryOperator(Config config) : L2CFunction(config) {}
+
+	virtual bool CheckSig(lua_State* L)
+	{
+		return lua_gettop(L) == 1 && l2c_is<a_ty>(L,-1);
+	}
+	virtual int Invoke(lua_State* L)
+	{
+		a_ty a = l2c_to<a_ty>(L,-1);
+		res_ty res = Op(a);
+		lua_pop(L,2);
+		l2c_push(L,res);
+		return 1;
+	}
+};
+template<typename res_ty, typename a_ty> class TL2CUnaryNeg : public TL2CUnaryOperator<res_ty, a_ty>
+{
+public:
+	TL2CUnaryNeg(Config config) : TL2CUnaryOperator<res_ty, a_ty>(config) {}
+	virtual res_ty Op(a_ty a) { return -a; }
+};
+
+//////////////////////////////////////////////////////////////////////////
+//Binary operator functions
+//////////////////////////////////////////////////////////////////////////
+template<typename res_ty, typename a_ty, typename b_ty> class TL2CBinaryOperator : public L2CFunction
+{
+public:
+	virtual res_ty Op(a_ty a, b_ty b) = 0;
+
+	TL2CBinaryOperator(Config config) : L2CFunction(config) {}
+
+	virtual bool CheckSig(lua_State* L)
+	{
+		return lua_gettop(L) == 2 && l2c_is<a_ty>(L,-2) && l2c_is<b_ty>(L,-1);
+	}
+	virtual int Invoke(lua_State* L)
+	{
+		a_ty a = l2c_to<a_ty>(L,-2);
+		b_ty b = l2c_to<b_ty>(L,-1);
+		res_ty res = Op(a,b);
+		lua_pop(L,2);
+		l2c_push(L,res);
+		return 1;
+	}
+};
+template<typename res_ty, typename a_ty, typename b_ty> class TL2CBinaryAdd : public TL2CBinaryOperator<res_ty, a_ty, b_ty>
+{
+public:
+	TL2CBinaryAdd(Config config) : TL2CBinaryOperator<res_ty, a_ty, b_ty>(config) {}
+	virtual res_ty Op(a_ty a, b_ty b) { return a + b; }
+};
+template<typename res_ty, typename a_ty, typename b_ty> class TL2CBinarySub : public TL2CBinaryOperator<res_ty, a_ty, b_ty>
+{
+public:
+	TL2CBinarySub(Config config) : TL2CBinaryOperator<res_ty, a_ty, b_ty>(config) {}
+	virtual res_ty Op(a_ty a, b_ty b) { return a - b; }
+};
+template<typename res_ty, typename a_ty, typename b_ty> class TL2CBinaryMul : public TL2CBinaryOperator<res_ty, a_ty, b_ty>
+{
+public:
+	TL2CBinaryMul(Config config) : TL2CBinaryOperator<res_ty, a_ty, b_ty>(config) {}
+	virtual res_ty Op(a_ty a, b_ty b) { return a * b; }
+};
+template<typename res_ty, typename a_ty, typename b_ty> class TL2CBinaryDiv : public TL2CBinaryOperator<res_ty, a_ty, b_ty>
+{
+public:
+	TL2CBinaryDiv(Config config) : TL2CBinaryOperator<res_ty, a_ty, b_ty>(config) {}
+	virtual res_ty Op(a_ty a, b_ty b) { return a / b; }
+};
+
+//Use the function glue generator to build the different functors
+//these build member, global and constructor functions for between 0 and 15 arguments
+#define FDEF_ARG_COUNT 0
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 1
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 2
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 3
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 4
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 5
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 6
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 7
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 8
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 9
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 10
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 11
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 12
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 13
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 14
+#include "tinyl2c_functionglue_preproc.inl"
+#define FDEF_ARG_COUNT 15
+#include "tinyl2c_functionglue_preproc.inl"
 
 //And an extra bit of glue to define a destructor function
 template<typename ty> class TL2CDestructor : public L2CFunction

@@ -12,7 +12,9 @@ function exec(line)
 		return
 	end
 	
-	print(res)
+	if res != nil then
+		print(res)
+	end
 end
 
 while true do

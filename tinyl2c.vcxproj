@@ -179,6 +179,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="src\tinyl2c_functionglue.inl" />
+    <None Include="src\tinyl2c_functionglue_preproc.inl" />
     <None Include="src\tinyl2c_internal.inl" />
     <None Include="src\tinyl2c_operatorglue.inl" />
     <None Include="src\tinyl2c_variableglue.inl" />

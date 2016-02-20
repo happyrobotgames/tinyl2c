@@ -104,9 +104,9 @@ template<typename ty> inline ty l2c_to(lua_State* L, int idx)
 
 //L2C definition macros
 #define L2C_INHERITS(name)		l2cinternal_pushmetatable<name>(L);	lua_setfield(L,-2,"_l2c_inherits");
-#define L2C_VARIABLE(name)		reg.m_variables.push_back(l2cinternal_buildvariable<ty, decltype(ty::name)>( L2CVariable::Config(#name) , offsetof(ty,name)));
-#define L2C_FUNCTION(name)		reg.m_functions.push_back(l2cinternal_buildfunc( L2CFunction::Config(#name) , &ty::name));
-#define L2C_CONSTRUCTOR(...)	reg.m_constructors.push_back(l2cinternal_buildconstructor(L2CFunction::Config("_ctor"), (ty*(*)(__VA_ARGS__))0 ));
+#define L2C_VARIABLE(name)		reg.m_variables.push_back(l2cinternal_buildmembervariable<ty, decltype(ty::name)>( L2CVariable::Config(#name) , offsetof(ty,name)));
+#define L2C_FUNCTION(name)		reg.m_functions.push_back(l2cinternal_buildmemberfunc( L2CFunction::Config(#name) , &ty::name));
+#define L2C_CONSTRUCTOR(...)	reg.m_constructors.push_back(l2cinternal_buildconstructorfunc(L2CFunction::Config("_ctor"), (ty*(*)(__VA_ARGS__))0 ));
 
 //Definitions of operators. To keep it simple, each expects you to specify the return type and all argument types
 #define L2C_OP_ADD(res_ty,a_ty,b_ty)	reg.m_add.push_back(new TL2CBinaryAdd<res_ty, a_ty, b_ty>(L2CFunction::Config("+")));
@@ -115,8 +115,15 @@ template<typename ty> inline ty l2c_to(lua_State* L, int idx)
 #define L2C_OP_DIV(res_ty,a_ty,b_ty)	reg.m_div.push_back(new TL2CBinaryDiv<res_ty, a_ty, b_ty>(L2CFunction::Config("/")));
 #define L2C_OP_UNM(res_ty,a_ty)			reg.m_unm.push_back(new TL2CUnaryNeg<res_ty, a_ty>(L2CFunction::Config("-")));
 
-//to initialize L2C with knowledge of some types, call L2C_REGISTER on each one
-#define L2C_REGISTER(_L,_ty)	{ l2cinternal_pushmetatable<_ty>(_L); lua_pop(_L,1); }
+//Register global variables
+#define L2C_ADD_GLOBAL_VARIABLE(_L,_var)		{ l2c_push(L,&_var); lua_setglobal(L,#_var); }
+
+//Register a global function
+#define L2C_ADD_GLOBAL_FUNCTION(_L,_function)	{ l2cinternal_create_function_invoke(L,l2cinternal_buildglobalfunc(L2CFunction::Config(#_function),&_function)); lua_setglobal(L,#_function); }
+
+//to manually initialize L2C with knowledge of some types, call L2C_ADD_TYPE on each one
+#define L2C_ADD_TYPE(_L,_ty)		{ l2cinternal_pushmetatable<_ty>(_L); lua_pop(_L,1); }
+
 
 //////////////////////////////////////////////////////////////////////////
 //Very rough example!
